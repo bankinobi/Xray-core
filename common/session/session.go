@@ -65,7 +65,7 @@ type Outbound struct {
 	Tag string
 	// Name of the outbound proxy that handles the connection.
 	Name string
-	// Conn is actually internet.Connection. May be nil. It is currently nil for outbound with proxySettings 
+	// Conn is actually internet.Connection. May be nil. It is currently nil for outbound with proxySettings
 	Conn net.Conn
 	// CanSpliceCopy is a property for this connection
 	// 1 = can, 2 = after processing protocol info should be able to, 3 = cannot
@@ -74,8 +74,8 @@ type Outbound struct {
 
 // SniffingRequest controls the behavior of content sniffing.
 type SniffingRequest struct {
-	ExcludeForDomain               []string
-	OverrideDestinationForProtocol []string
+	ExcludeForDomain               []string // read-only once set
+	OverrideDestinationForProtocol []string // read-only once set
 	Enabled                        bool
 	MetadataOnly                   bool
 	RouteOnly                      bool

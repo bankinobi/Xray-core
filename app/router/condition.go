@@ -119,7 +119,7 @@ type MultiGeoIPMatcher struct {
 func NewMultiGeoIPMatcher(geoips []*GeoIP, onSource bool) (*MultiGeoIPMatcher, error) {
 	var matchers []*GeoIPMatcher
 	for _, geoip := range geoips {
-		matcher, err := globalGeoIPContainer.Add(geoip)
+		matcher, err := GlobalGeoIPContainer.Add(geoip)
 		if err != nil {
 			return nil, err
 		}
@@ -202,7 +202,7 @@ func NewUserMatcher(users []string) *UserMatcher {
 	for _, user := range users {
 		if len(user) > 0 {
 			if len(user) > 7 && strings.HasPrefix(user, "regexp:") {
-				if re, err := regexp.Compile(user[7:]); err != nil {
+				if re, err := regexp.Compile(user[7:]); err == nil {
 					patternsCopy = append(patternsCopy, re)
 				}
 				// Items of users slice with an invalid regexp syntax are ignored.

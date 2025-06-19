@@ -1,36 +1,62 @@
-# syntax=docker/dockerfile:1
-FROM --platform=$BUILDPLATFORM golang:alpine AS build
+# syntax=docker/dockerfile:latest
+FROM --platform=$BUILDPLATFORM golang:latest AS build
+
+# Build xray-core
 WORKDIR /src
 COPY . .
 ARG TARGETOS
 ARG TARGETARCH
 RUN GOOS=$TARGETOS GOARCH=$TARGETARCH CGO_ENABLED=0 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
-ADD https://github.com/v2fly/geoip/releases/latest/download/geoip.dat /v2fly/geoip.dat
-ADD https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat /v2fly/geosite.dat
-ADD https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat /loyalsoldier/geoip.dat
-ADD https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat /loyalsoldier/geosite.dat
 
-FROM --platform=linux/amd64 alpine:latest
-WORKDIR /var/log/xray
-COPY .github/docker/files/config.json /etc/xray/config.json
-COPY --from=build --chmod=755 /src/xray /usr/bin/xray
+# Download geodat into a staging directory
+ADD https://raw.githubusercontent.com/Loyalsoldier/v2ray-rules-dat/release/geoip.dat /tmp/geodat/geoip.dat
+ADD https://raw.githubusercontent.com/Loyalsoldier/v2ray-rules-dat/release/geosite.dat /tmp/geodat/geosite.dat
 
-RUN mkdir -p /var/log/xray && \
-    touch /var/log/xray/access.log && \
-    touch /var/log/xray/error.log && \
-    ln -sf /dev/stdout /var/log/xray/access.log && \
-    ln -sf /dev/stderr /var/log/xray/error.log
+RUN mkdir -p /tmp/empty
 
-USER root
-WORKDIR /root
-VOLUME /etc/xray
-ARG TZ=Europe/Samara
+# Create config files with empty JSON content
+RUN mkdir -p /tmp/usr/local/etc/xray
+RUN cat <<EOF >/tmp/usr/local/etc/xray/00_log.json
+{
+  "log": {
+    "error": "/var/log/xray/error.log",
+    "loglevel": "warning",
+    "access": "none",
+    "dnsLog": false
+  }
+}
+EOF
+RUN echo '{}' >/tmp/usr/local/etc/xray/01_api.json
+RUN echo '{}' >/tmp/usr/local/etc/xray/02_dns.json
+RUN echo '{}' >/tmp/usr/local/etc/xray/03_routing.json
+RUN echo '{}' >/tmp/usr/local/etc/xray/04_policy.json
+RUN echo '{}' >/tmp/usr/local/etc/xray/05_inbounds.json
+RUN echo '{}' >/tmp/usr/local/etc/xray/06_outbounds.json
+RUN echo '{}' >/tmp/usr/local/etc/xray/07_transport.json
+RUN echo '{}' >/tmp/usr/local/etc/xray/08_stats.json
+RUN echo '{}' >/tmp/usr/local/etc/xray/09_reverse.json
+
+# Create log files
+RUN mkdir -p /tmp/var/log/xray && touch \
+  /tmp/var/log/xray/access.log \
+  /tmp/var/log/xray/error.log
+
+# Build finally image
+FROM gcr.io/distroless/static:nonroot
+
+COPY --from=build --chown=0:0 --chmod=755 /src/xray /usr/local/bin/xray
+COPY --from=build --chown=0:0 --chmod=755 /tmp/empty /usr/local/share/xray
+COPY --from=build --chown=0:0 --chmod=644 /tmp/geodat/*.dat /usr/local/share/xray/
+COPY --from=build --chown=0:0 --chmod=755 /tmp/empty /usr/local/etc/xray
+COPY --from=build --chown=0:0 --chmod=644 /tmp/usr/local/etc/xray/*.json /usr/local/etc/xray/
+COPY --from=build --chown=0:0 --chmod=755 /tmp/empty /var/log/xray
+COPY --from=build --chown=65532:65532 --chmod=600 /tmp/var/log/xray/*.log /var/log/xray/
+
+VOLUME /usr/local/etc/xray
+VOLUME /var/log/xray
+
+ARG TZ=Etc/UTC
 ENV TZ=$TZ
 
-RUN apk add --no-cache tzdata
-
-ENTRYPOINT [ "/usr/bin/xray" ]
-CMD [ "-config", "/etc/xray/config.json" ]
-
-ARG flavor=v2fly
-COPY --from=build --chmod=644 /$flavor /usr/share/xray
+ENTRYPOINT [ "/usr/local/bin/xray" ]
+CMD [ "-confdir", "/usr/local/etc/xray/" ]
